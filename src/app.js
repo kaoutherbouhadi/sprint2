@@ -20,10 +20,12 @@ mongoose.connect('mongodb://127.0.0.1:27017/users', {
 });
 
 const userSchema = new mongoose.Schema({
-    username: { type: String, required: true },
-    password: { type: String, required: true },
-    email: { type: String, required: true },
-    role: { type: String }
+  numInscrit: { type: Number, unique: true, required: true },
+  username: { type: String, required: true },
+  password: { type: String, required: true },
+  email: { type: String, required: true },
+  role: { type: String },
+  userClass: { type: String }  // Remplace 'class' par 'userClass'
 });
 
 const User = mongoose.model('User', userSchema);
@@ -62,20 +64,19 @@ client.on('started', () => {
 
 // Création d'un utilisateur par l'admin avec choix du rôle
 app.post('/addUser', async (req, res) => {
-  const { username, password, email, role } = req.body;
+  const { numInscrit, username, password, email, role, userClass } = req.body;
 
   try {
-      const existingUser = await User.findOne({ username });
+      const existingUser = await User.findOne({ $or: [{ username }, { numInscrit }] });
 
       if (existingUser) {
           return res.status(400).json({ message: 'Cet utilisateur existe déjà.' });
       }
 
-      // Vérifier si le rôle spécifié est valide, sinon utiliser un rôle par défaut
-      const validRoles = ['admin', 'utilisateur', 'autre_role_par_defaut'];
+      const validRoles = ['admin', 'utilisateur', 'enseignant'];
       const selectedRole = validRoles.includes(role) ? role : 'utilisateur';
 
-      const newUser = new User({ username, password, email, role: selectedRole });
+      const newUser = new User({ numInscrit, username, password, email, role: selectedRole, userClass });
       await newUser.save();
 
       res.status(201).json({ message: 'Utilisateur ajouté avec succès' });
@@ -85,9 +86,10 @@ app.post('/addUser', async (req, res) => {
   }
 });
 // Mise à jour d'un utilisateur par l'admin
+
 app.put('/updateUser/:id', async (req, res) => {
   const userId = req.params.id;
-  const { username, password, email, role } = req.body;
+  const { numInscrit, username, password, email, role, userClass } = req.body;
 
   try {
       const userToUpdate = await User.findById(userId);
@@ -96,11 +98,19 @@ app.put('/updateUser/:id', async (req, res) => {
           return res.status(404).json({ message: 'Utilisateur non trouvé.' });
       }
 
-      // Mettre à jour les propriétés spécifiées si elles sont fournies dans le corps de la requête
+      if (numInscrit && numInscrit !== userToUpdate.numInscrit) {
+          const existingUser = await User.findOne({ numInscrit });
+          if (existingUser) {
+              return res.status(400).json({ message: 'Ce numéro d\'inscription est déjà utilisé par un autre utilisateur.' });
+          }
+      }
+
+      if (numInscrit) userToUpdate.numInscrit = numInscrit;
       if (username) userToUpdate.username = username;
       if (password) userToUpdate.password = password;
       if (email) userToUpdate.email = email;
       if (role) userToUpdate.role = role;
+      if (userClass) userToUpdate.userClass = userClass;  // Remplace 'class' par 'userClass'
 
       await userToUpdate.save();
 
@@ -110,7 +120,7 @@ app.put('/updateUser/:id', async (req, res) => {
       res.status(500).json({ message: 'Une erreur est survenue lors de la mise à jour de l\'utilisateur.' });
   }
 });
-// Suppression d'un utilisateur par l'admin
+
 app.delete('/deleteUser/:id', async (req, res) => {
   const userId = req.params.id;
 
