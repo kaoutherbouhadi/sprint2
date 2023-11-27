@@ -8,8 +8,7 @@ const PORT = process.env.PORT || 3003;
 
 app.use(bodyParser.json());
 
-// Utiliser la même configuration de base de données que dans le microservice d'authentification
-mongoose.connect('mongodb://127.0.0.1:27017/users,eleve,enseignant', {
+mongoose.connect('mongodb://127.0.0.1:27017/eleve_enseignant', {
     useNewUrlParser: true,
     useUnifiedTopology: true,
 }).then(() => {
@@ -19,32 +18,24 @@ mongoose.connect('mongodb://127.0.0.1:27017/users,eleve,enseignant', {
     process.exit(1);
 });
 
-const userSchema = new mongoose.Schema({
- 
-  username: { type: String, required: true },
-  password: { type: String, required: true },
-  email: { type: String, required: true },
-  role: { type: String },
- // Remplace 'class' par 'userClass'
-});
-
-const User = mongoose.model('User', userSchema);
-
-// Schéma spécifique pour les élèves avec héritage du schéma utilisateur
 const eleveSchema = new mongoose.Schema({
-    numInscrit: { type: Number, unique: true, required: true },
+    username: { type: String, required: true, unique: true },
+    password: { type: String, required: true },
+    email: { type: String, required: true },
+    role: { type: String, default: 'eleve' },
     userClass: { type: String },
 });
 
-// Définir Eleve comme une classe qui hérite de User
-const Eleve = User.discriminator('Eleve', eleveSchema);
-// Schéma spécifique pour les enseignants avec héritage du schéma utilisateur
+const Eleve = mongoose.model('Eleve', eleveSchema);
+
 const enseignantSchema = new mongoose.Schema({
-    userClass: { type: String },  // Ajoutez les champs spécifiques à Enseignant ici
+    username: { type: String, required: true, unique: true },
+    password: { type: String, required: true },
+    email: { type: String, required: true, unique: true },
+    role: { type: String, default: 'enseignant' },
 });
 
-// Définir Enseignant comme une classe qui hérite de User
-const Enseignant = User.discriminator('Enseignant', enseignantSchema);
+const Enseignant = mongoose.model('Enseignant', enseignantSchema);
 
 const client = new Eureka({
     instance: {
@@ -79,26 +70,26 @@ client.on('started', () => {
     console.log('Service enregistré avec succès auprès d\'Eureka.');
 });
 
-
 app.post('/addEleve', async (req, res) => {
-  const { numInscrit, username, password, email, userClass } = req.body;
+    const { username, password, email, userClass } = req.body;
 
-  try {
-      const existingEleve = await Eleve.findOne({ $or: [{ username }, { numInscrit }] });
+    try {
+        const existingEleve = await Eleve.findOne({ username });
 
-      if (existingEleve) {
-          return res.status(400).json({ message: 'Cet élève existe déjà.' });
-      }
+        if (existingEleve) {
+            return res.status(400).json({ message: 'Cet élève existe déjà.' });
+        }
 
-      const newEleve = new Eleve({ numInscrit, username, password, email, role: 'eleve', userClass });
-      await newEleve.save();
+        const newEleve = new Eleve({ username, password, email, userClass });
+        await newEleve.save();
 
-      res.status(201).json({ message: 'Élève ajouté avec succès' });
-  } catch (error) {
-      console.error('Erreur lors de l\'ajout de l\'élève :', error);
-      res.status(500).json({ message: 'Une erreur est survenue lors de l\'ajout de l\'élève.' });
-  }
+        res.status(201).json({ message: 'Élève ajouté avec succès' });
+    } catch (error) {
+        console.error('Erreur lors de l\'ajout de l\'élève :', error);
+        res.status(500).json({ message: 'Une erreur est survenue lors de l\'ajout de l\'élève.' });
+    }
 });
+
 app.delete('/deleteEleve/:id', async (req, res) => {
     const eleveId = req.params.id;
 
@@ -109,18 +100,16 @@ app.delete('/deleteEleve/:id', async (req, res) => {
             return res.status(404).json({ message: 'Élève non trouvé.' });
         }
 
-        // Supprimer également l'utilisateur correspondant dans la table users
-        await User.findOneAndDelete({ numInscrit: deletedEleve.numInscrit });
-
         res.status(200).json({ message: 'Élève supprimé avec succès' });
     } catch (error) {
         console.error('Erreur lors de la suppression de l\'élève :', error);
         res.status(500).json({ message: 'Une erreur est survenue lors de la suppression de l\'élève.' });
     }
 });
+
 app.put('/updateEleve/:id', async (req, res) => {
     const eleveId = req.params.id;
-    const { numInscrit, username, password, email, userClass } = req.body;
+    const { username, password, email, userClass } = req.body;
 
     try {
         const eleveToUpdate = await Eleve.findById(eleveId);
@@ -129,16 +118,6 @@ app.put('/updateEleve/:id', async (req, res) => {
             return res.status(404).json({ message: 'Élève non trouvé.' });
         }
 
-        // Vous pouvez effectuer des vérifications supplémentaires si nécessaire
-
-        if (numInscrit && numInscrit !== eleveToUpdate.numInscrit) {
-            const existingEleve = await Eleve.findOne({ numInscrit });
-            if (existingEleve) {
-                return res.status(400).json({ message: 'Ce numéro d\'inscription est déjà utilisé par un autre élève.' });
-            }
-        }
-
-        if (numInscrit) eleveToUpdate.numInscrit = numInscrit;
         if (username) eleveToUpdate.username = username;
         if (password) eleveToUpdate.password = password;
         if (email) eleveToUpdate.email = email;
@@ -152,27 +131,27 @@ app.put('/updateEleve/:id', async (req, res) => {
         res.status(500).json({ message: 'Une erreur est survenue lors de la mise à jour de l\'élève.' });
     }
 });
- 
 
 app.post('/addEnseignant', async (req, res) => {
-  const { username, password, email} = req.body;
+    const { username, password, email } = req.body;
 
-  try {
-      const existingEnseignant = await Enseignant.findOne({ username });
+    try {
+        const existingEnseignant = await Enseignant.findOne({ username });
 
-      if (existingEnseignant) {
-          return res.status(400).json({ message: 'Cet enseignant existe déjà.' });
-      }
+        if (existingEnseignant) {
+            return res.status(400).json({ message: 'Cet enseignant existe déjà.' });
+        }
 
-      const newEnseignant = new Enseignant({ username, password, email, role: 'enseignant' });
-      await newEnseignant.save();
+        const newEnseignant = new Enseignant({ username, password, email });
+        await newEnseignant.save();
 
-      res.status(201).json({ message: 'Enseignant ajouté avec succès' });
-  } catch (error) {
-      console.error('Erreur lors de l\'ajout de l\'enseignant :', error);
-      res.status(500).json({ message: 'Une erreur est survenue lors de l\'ajout de l\'enseignant.' });
-  }
+        res.status(201).json({ message: 'Enseignant ajouté avec succès' });
+    } catch (error) {
+        console.error('Erreur lors de l\'ajout de l\'enseignant :', error);
+        res.status(500).json({ message: 'Une erreur est survenue lors de l\'ajout de l\'enseignant.' });
+    }
 });
+
 app.delete('/deleteEnseignant/:id', async (req, res) => {
     const enseignantId = req.params.id;
 
@@ -183,18 +162,16 @@ app.delete('/deleteEnseignant/:id', async (req, res) => {
             return res.status(404).json({ message: 'Enseignant non trouvé.' });
         }
 
-        // Supprimer également l'utilisateur correspondant dans la table users
-        await User.findOneAndDelete({ username: deletedEnseignant.username });
-
         res.status(200).json({ message: 'Enseignant supprimé avec succès' });
     } catch (error) {
         console.error('Erreur lors de la suppression de l\'enseignant :', error);
         res.status(500).json({ message: 'Une erreur est survenue lors de la suppression de l\'enseignant.' });
     }
 });
+
 app.put('/updateEnseignant/:id', async (req, res) => {
     const enseignantId = req.params.id;
-    const { username, password, email, userClass } = req.body;
+    const { username, password, email } = req.body;
 
     try {
         const enseignantToUpdate = await Enseignant.findById(enseignantId);
@@ -203,12 +180,9 @@ app.put('/updateEnseignant/:id', async (req, res) => {
             return res.status(404).json({ message: 'Enseignant non trouvé.' });
         }
 
-        // Vous pouvez effectuer des vérifications supplémentaires si nécessaire
-
         if (username) enseignantToUpdate.username = username;
         if (password) enseignantToUpdate.password = password;
         if (email) enseignantToUpdate.email = email;
-       
 
         await enseignantToUpdate.save();
 
@@ -219,19 +193,24 @@ app.put('/updateEnseignant/:id', async (req, res) => {
     }
 });
 
-// Ajoutez une route pour accéder à la table "User"
-app.get('/userTEST', async (req, res) => {
+app.get('/eleves', async (req, res) => {
     try {
-      // Utilisez Mongoose ou un autre ORM pour récupérer les données de la table "User"
-      const users = await User.find();
-      res.status(200).json(users);
+        const eleves = await Eleve.find();
+        res.status(200).json(eleves);
     } catch (error) {
-      res.status(500).json({ message: 'Une erreur est survenue lors de la récupération des utilisateurs.' });
+        res.status(500).json({ message: 'Une erreur est survenue lors de la récupération des élèves.' });
     }
-  });
-app.get('/', (req, res) => {
-    res.send('Bienvenue sur le microservice Node.js.');
-  });
+});
+
+app.get('/enseignants', async (req, res) => {
+    try {
+        const enseignants = await Enseignant.find();
+        res.status(200).json(enseignants);
+    } catch (error) {
+        res.status(500).json({ message: 'Une erreur est survenue lors de la récupération des enseignants.' });
+    }
+});
+
 app.listen(PORT, () => {
-    console.log(`Serveur de gestion des étudiants en cours d'écoute sur le port ${PORT}`);
+    console.log(`Serveur en cours d'écoute sur le port ${PORT}`);
 });
