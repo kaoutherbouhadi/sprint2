@@ -33,9 +33,16 @@ const enseignantSchema = new mongoose.Schema({
     password: { type: String, required: true },
     email: { type: String, required: true, unique: true },
     role: { type: String, default: 'enseignant' },
+    matiere: { type: String },
 });
 
 const Enseignant = mongoose.model('Enseignant', enseignantSchema);
+const profClassSchema = new mongoose.Schema({
+    idprof: { type: mongoose.Schema.Types.ObjectId, ref: 'Enseignant' },
+    idclass: { type: mongoose.Schema.Types.ObjectId, ref: 'Education.Classe' }, // Référence à la classe dans la base Education
+});
+
+const ProfClass = mongoose.model('ProfClass', profClassSchema);
 
 const client = new Eureka({
     instance: {
@@ -133,7 +140,7 @@ app.put('/updateEleve/:id', async (req, res) => {
 });
 
 app.post('/addEnseignant', async (req, res) => {
-    const { username, password, email } = req.body;
+    const { username, password, email,matiere } = req.body;
 
     try {
         const existingEnseignant = await Enseignant.findOne({ username });
@@ -142,7 +149,7 @@ app.post('/addEnseignant', async (req, res) => {
             return res.status(400).json({ message: 'Cet enseignant existe déjà.' });
         }
 
-        const newEnseignant = new Enseignant({ username, password, email });
+        const newEnseignant = new Enseignant({ username, password, email,matiere });
         await newEnseignant.save();
 
         res.status(201).json({ message: 'Enseignant ajouté avec succès' });
@@ -171,7 +178,7 @@ app.delete('/deleteEnseignant/:id', async (req, res) => {
 
 app.put('/updateEnseignant/:id', async (req, res) => {
     const enseignantId = req.params.id;
-    const { username, password, email } = req.body;
+    const { username, password, email,matiere } = req.body;
 
     try {
         const enseignantToUpdate = await Enseignant.findById(enseignantId);
@@ -183,7 +190,7 @@ app.put('/updateEnseignant/:id', async (req, res) => {
         if (username) enseignantToUpdate.username = username;
         if (password) enseignantToUpdate.password = password;
         if (email) enseignantToUpdate.email = email;
-
+        if (matiere) enseignantToUpdate.matiere = matiere;
         await enseignantToUpdate.save();
 
         res.status(200).json({ message: 'Enseignant mis à jour avec succès' });
@@ -192,6 +199,68 @@ app.put('/updateEnseignant/:id', async (req, res) => {
         res.status(500).json({ message: 'Une erreur est survenue lors de la mise à jour de l\'enseignant.' });
     }
 });
+app.post('/addEnseignantToClasse/:enseignantId/:classeId', async (req, res) => {
+    const { enseignantId, classeId } = req.params;
+
+    try {
+        const profClass = new ProfClass({ idprof: enseignantId, idclass: classeId });
+        await profClass.save();
+
+        res.status(200).json({ message: 'Enseignant ajouté à la classe avec succès' });
+    } catch (error) {
+        console.error('Erreur lors de l\'ajout de l\'enseignant à la classe :', error);
+        res.status(500).json({ message: 'Une erreur est survenue lors de l\'ajout de l\'enseignant à la classe.' });
+    }
+});
+
+app.delete('/removeEnseignantFromClasse/:enseignantId/:classeId', async (req, res) => {
+    const { enseignantId, classeId } = req.params;
+
+    try {
+        await ProfClass.deleteOne({ idprof: enseignantId, idclass: classeId });
+
+        res.status(200).json({ message: 'Enseignant retiré de la classe avec succès' });
+    } catch (error) {
+        console.error('Erreur lors du retrait de l\'enseignant de la classe :', error);
+        res.status(500).json({ message: 'Une erreur est survenue lors du retrait de l\'enseignant de la classe.' });
+    }
+});
+// Mettre à jour la classe d'un enseignant
+app.put('/updateProfClass/:idProfClass', async (req, res) => {
+    const idProfClass = req.params.idProfClass;
+
+    try {
+        const existingProfClass = await ProfClass.findById(idProfClass);
+
+        if (!existingProfClass) {
+            return res.status(404).json({ message: 'Association non trouvée.' });
+        }
+
+        existingProfClass.idprof = req.body.idprof;
+        existingProfClass.idclass = req.body.idclass;
+
+        await existingProfClass.save();
+
+        res.status(200).json({ message: 'Association mise à jour avec succès' });
+    } catch (error) {
+        console.error('Erreur lors de la mise à jour de l\'association :', error);
+        res.status(500).json({ message: 'Une erreur est survenue lors de la mise à jour de l\'association.' });
+    }
+});
+
+
+
+app.get('/getAllProfClass', async (req, res) => {
+    try {
+        const allProfClass = await ProfClass.find();
+        res.status(200).json(allProfClass);
+    } catch (error) {
+        console.error('Erreur lors de la récupération de tous les enregistrements de ProfClass :', error);
+        res.status(500).json({ message: 'Une erreur est survenue lors de la récupération de tous les enregistrements de ProfClass.' });
+    }
+});
+
+
 
 app.get('/eleves', async (req, res) => {
     try {
