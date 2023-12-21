@@ -1,14 +1,15 @@
 const express = require('express');
 const mongoose = require('mongoose');
+const cors = require('cors');
 const bodyParser = require('body-parser');
 const Eureka = require('eureka-js-client').Eureka;
 
 const app = express();
 const PORT = process.env.PORT || 3003;
-
+app.use(cors());
 app.use(bodyParser.json());
 
-mongoose.connect('mongodb://127.0.0.1:27017/eleve_enseignant', {
+mongoose.connect('mongodb://127.0.0.1:27017/Education', {
     useNewUrlParser: true,
     useUnifiedTopology: true,
 }).then(() => {
@@ -23,7 +24,9 @@ const eleveSchema = new mongoose.Schema({
     password: { type: String, required: true },
     email: { type: String, required: true },
     role: { type: String, default: 'eleve' },
-    userClass: { type: String },
+    etat: { type: Number, default: 1 },
+    numInscrit: { type: String, required: true, unique: true},
+    userClass: { type: String, required: true },
 });
 
 const Eleve = mongoose.model('Eleve', eleveSchema);
@@ -78,7 +81,8 @@ client.on('started', () => {
 });
 
 app.post('/addEleve', async (req, res) => {
-    const { username, password, email, userClass } = req.body;
+    console.log('Received request to addEleve:', req.body);
+    const { username, password, email,numInscrit, userClass } = req.body;
 
     try {
         const existingEleve = await Eleve.findOne({ username });
@@ -87,7 +91,7 @@ app.post('/addEleve', async (req, res) => {
             return res.status(400).json({ message: 'Cet élève existe déjà.' });
         }
 
-        const newEleve = new Eleve({ username, password, email, userClass });
+        const newEleve = new Eleve({ username, password, email, numInscrit, userClass });
         await newEleve.save();
 
         res.status(201).json({ message: 'Élève ajouté avec succès' });
@@ -113,10 +117,30 @@ app.delete('/deleteEleve/:id', async (req, res) => {
         res.status(500).json({ message: 'Une erreur est survenue lors de la suppression de l\'élève.' });
     }
 });
+app.get('/getEleveDetails/:id', async (req, res) => {
+    const eleveId = req.params.id;
+
+    try {
+        // Utilisez la méthode findById pour rechercher l'élève par ID
+        const eleveDetails = await Eleve.findById(eleveId);
+
+        if (!eleveDetails) {
+            // Si aucun élève n'est trouvé, retournez une réponse 404
+            return res.status(404).json({ message: 'Élève non trouvé.' });
+        }
+
+        // Si l'élève est trouvé, renvoyez ses détails en tant que réponse JSON
+        res.status(200).json(eleveDetails);
+    } catch (error) {
+        // En cas d'erreur, renvoyez une réponse 500 avec un message d'erreur
+        console.error('Erreur lors de la récupération des détails de l\'élève :', error);
+        res.status(500).json({ message: 'Une erreur est survenue lors de la récupération des détails de l\'élève.' });
+    }
+});
 
 app.put('/updateEleve/:id', async (req, res) => {
     const eleveId = req.params.id;
-    const { username, password, email, userClass } = req.body;
+    const { newUsername, newPassword, email, newUserClass, newNumInscrit, newEtat } = req.body;
 
     try {
         const eleveToUpdate = await Eleve.findById(eleveId);
@@ -125,10 +149,13 @@ app.put('/updateEleve/:id', async (req, res) => {
             return res.status(404).json({ message: 'Élève non trouvé.' });
         }
 
-        if (username) eleveToUpdate.username = username;
-        if (password) eleveToUpdate.password = password;
+        // Update the fields based on the provided data
+        if (newUsername) eleveToUpdate.username = newUsername;
+        if (newPassword) eleveToUpdate.password = newPassword;
         if (email) eleveToUpdate.email = email;
-        if (userClass) eleveToUpdate.userClass = userClass;
+        if (newNumInscrit) eleveToUpdate.numInscrit = newNumInscrit;
+        if (newUserClass) eleveToUpdate.userClass = newUserClass;
+        if (newEtat) eleveToUpdate.etat = newEtat; // Utilisez 'newEtat' ici
 
         await eleveToUpdate.save();
 
@@ -138,6 +165,7 @@ app.put('/updateEleve/:id', async (req, res) => {
         res.status(500).json({ message: 'Une erreur est survenue lors de la mise à jour de l\'élève.' });
     }
 });
+
 
 app.post('/addEnseignant', async (req, res) => {
     const { username, password, email,matiere } = req.body;
@@ -283,3 +311,4 @@ app.get('/enseignants', async (req, res) => {
 app.listen(PORT, () => {
     console.log(`Serveur en cours d'écoute sur le port ${PORT}`);
 });
+
