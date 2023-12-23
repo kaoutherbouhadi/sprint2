@@ -26,7 +26,7 @@ const eleveSchema = new mongoose.Schema({
     role: { type: String, default: 'eleve' },
     etat: { type: Number, default: 1 },
     numInscrit: { type: String, required: true, unique: true},
-    userClass: { type: String, required: true },
+    userClass: { type: mongoose.Schema.Types.ObjectId, ref: 'Classe', required: true },
 });
 
 const Eleve = mongoose.model('Eleve', eleveSchema);
@@ -82,7 +82,7 @@ client.on('started', () => {
 
 app.post('/addEleve', async (req, res) => {
     console.log('Received request to addEleve:', req.body);
-    const { username, password, email,numInscrit, userClass } = req.body;
+    const { username, password, email, numInscrit, userClass } = req.body;
 
     try {
         const existingEleve = await Eleve.findOne({ username });
@@ -100,6 +100,7 @@ app.post('/addEleve', async (req, res) => {
         res.status(500).json({ message: 'Une erreur est survenue lors de l\'ajout de l\'élève.' });
     }
 });
+
 
 app.delete('/deleteEleve/:id', async (req, res) => {
     const eleveId = req.params.id;
